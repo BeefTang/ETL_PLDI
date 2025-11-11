@@ -1,7 +1,9 @@
 add_library(core SHARED
-    CTL.cpp
-    dimensions_utils.cpp
-    reader.cpp
+        ETL.cpp
+        dimensions_utils.cpp
+        context.cpp  
+        mem_planner.cpp  
+        reader.cpp
 )
 
 target_include_directories(core
