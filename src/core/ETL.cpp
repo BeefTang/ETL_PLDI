@@ -154,18 +154,18 @@ namespace ETL {
             auto mnkc = get_M_N_K_C(l_dims, r_dims, this_dims);
 
 
-            temp->down_M = mnkc[0];
-            temp->down_N = mnkc[1];
-            temp->down_K = mnkc[2];
-            temp->down_C = mnkc[3];
+            temp->down_M.insert(mnkc[0].begin(), mnkc[0].end());
+            temp->down_N.insert(mnkc[1].begin(), mnkc[1].end());
+            temp->down_K.insert(mnkc[2].begin(), mnkc[2].end());
+            temp->down_C.insert(mnkc[3].begin(), mnkc[3].end());
 
-            l->up_L = mnkc[0];
-            l->up_K = mnkc[2];
-            l->up_C = mnkc[3];
+            l->up_L.insert(mnkc[0].begin(), mnkc[0].end());
+            l->up_K.insert(mnkc[2].begin(), mnkc[2].end());
+            l->up_C.insert(mnkc[3].begin(), mnkc[3].end());
 
-            r->up_L = mnkc[1];
-            r->up_K = mnkc[2];
-            r->up_C = mnkc[3];
+            r->up_L.insert(mnkc[1].begin(), mnkc[1].end());
+            r->up_K.insert(mnkc[2].begin(), mnkc[2].end());
+            r->up_C.insert(mnkc[3].begin(), mnkc[3].end());
             /*****************/
 
             int big = contract.first > contract.second ? contract.first : contract.second;
@@ -419,23 +419,30 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
 
     /***********E-saturation*************** */ 
 
-    bool check_order(const std::vector<int>& a, const std::vector<int>& b,
-            const std::vector<int>& c, const std::vector<int>& d,
-            const std::vector<char>& order) {
+    bool check_order(
+            const std::unordered_set<ModeType>& a,
+            const std::unordered_set<ModeType>& b,
+            const std::unordered_set<ModeType>& c,
+            const std::vector<ModeType>& d,     // keep ordered
+            const std::vector<char>& order)
+    {
         // 1. Build index map of d
-        std::unordered_map<int, int> pos;
+        std::unordered_map<ModeType, int> pos;
         for (int i = 0; i < (int)d.size(); ++i)
             pos[d[i]] = i;
 
         // 2. Compute [min, max] index range for each group
-        auto get_range = [&](const std::vector<int>& v) {
-            int min_idx = d.size(), max_idx = -1;
-            for (int x : v) {
-                int p = pos.at(x);
+        auto get_range = [&](const std::unordered_set<ModeType>& v) {
+            int min_idx = (int)d.size();
+            int max_idx = -1;
+            for (auto x : v) {
+                auto it = pos.find(x);
+                if (it == pos.end()) continue; // ignore elements not in d
+                int p = it->second;
                 min_idx = std::min(min_idx, p);
                 max_idx = std::max(max_idx, p);
             }
-            return std::pair<int,int>{min_idx, max_idx};
+            return std::pair<int, int>{min_idx, max_idx};
         };
 
         auto range_a = get_range(a);
@@ -443,7 +450,7 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
         auto range_c = get_range(c);
 
         // Helper to access by char
-        auto get_range_by_name = [&](char name) -> std::pair<int,int> {
+        auto get_range_by_name = [&](char name) -> std::pair<int, int> {
             if (name == 'a') return range_a;
             if (name == 'b') return range_b;
             return range_c;
@@ -452,7 +459,7 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
         // 3. Check that order[i]’s range finishes before order[i+1] starts
         for (size_t i = 0; i + 1 < order.size(); ++i) {
             auto r1 = get_range_by_name(order[i]);
-            auto r2 = get_range_by_name(order[i+1]);
+            auto r2 = get_range_by_name(order[i + 1]);
             if (r1.second >= r2.first) return false;
         }
         return true;
@@ -481,7 +488,7 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
 
             }
             else{
-                std::vector<std::pair<std::vector<Modes>, Modes>> rules = {
+                std::vector<std::pair<std::vector<UnorderedModes>, UnorderedModes>> rules = {
                         {{c->down_M, c->down_N}, c->down_C},
                         {{c->up_L, c->up_K}, c->up_C}
                     };
@@ -526,6 +533,40 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
         find_hotpoints(program->exp, temp);
 
     }
+
+
+    //void DP(std::shared_ptr<Exp> exp){
+    //    //2 lists: up_possible(by z3) and current_all nodes[build in DP], and others[placeholder]
+    //    //current has node that must have perm upwards
+
+    //    if (auto i = std::dynamic_pointer_cast<Input>(exp))
+    //    {
+    //        //if the layout has LKC or KLC, the list has one layout, namely itself
+    //        each layout has num_perms == 0 if there is a layout 
+    //        
+    //        and other has 1 perm
+
+    //        return;
+    //    }
+    //    else if (auto c = std::dynamic_pointer_cast<Contract>(exp))
+    //    {
+    //        DP l child and r child
+
+    //        check l and r children's list
+    //        l not empty   r not empty,  has same K.  
+    //        1          1                     1           perms = l + r [if corresponding layout is in list, add to that layout pointing to corresponding l and r, new nodes are placed in current, othrewise produce a new layout, ]
+    //        0          0                     ?           perms = l + r +2 [all nodes and others + l + r +2, pointing to others]
+    //        0          1                     ?           perms = l + r +1 [generating nodes suitable for r, that node has l + r + 1, if alaready exising, add to exising up_possible]
+    //        1          0                     ?            perms = l + r +1 [generating nodes suitable for l, that node has l + r + 1, if alaready exising, add to exising up_possible]
+    //        1          1                     0            perms = l + r +1 [generating nodes suitable for l and r, that node has l + r + 1, if alaready exising, add to exising up_possible]
+
+    //        //list has node M N K C
+    //        a b -> c: m continu same? n continue same? k continue same?
+
+    //        
+    //    }
+
+    //}
 
     /***********Print functions for debugging*************** */ 
     void time_print(float estimated_time, float real_time){

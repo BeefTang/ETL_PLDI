@@ -4,7 +4,9 @@
 #include <string>
 #include <map>
 #include <algorithm>
+#include <unordered_set>
 #include "context.h"
+#include "solve_perms.h"
 
 namespace ETL{
 using namespace z3;
@@ -28,8 +30,8 @@ expr z3_min(const std::vector<expr> &args) {
 
 std::vector<Modes> permutation_with_rules(
     const Modes &elements,
-    const std::vector<std::pair<std::vector<Modes>,
-                                Modes>> &rules)
+    const std::vector<std::pair<std::vector<UnorderedModes>,
+                                UnorderedModes>> &rules)
 {
     context c;
     solver s(c);
@@ -62,7 +64,7 @@ std::vector<Modes> permutation_with_rules(
             for (auto &x : rightmost) R.push_back(pos.at(x));
             expr min_R = z3_min(R);
             for (auto &x : elements) {
-                if (std::find(rightmost.begin(), rightmost.end(), x) == rightmost.end())
+                if (rightmost.find(x) == rightmost.end())
                     s.add(pos.at(x) < min_R);
             }
         }

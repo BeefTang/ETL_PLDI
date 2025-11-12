@@ -32,7 +32,6 @@ namespace ETL
     class StaticMemoryPlanner;
 
 
-
     struct ETL_stats {
         float mean_time_ms{0};
         float stddev_time_ms{0};
@@ -58,6 +57,13 @@ namespace ETL
         }
     };
 
+    struct E_node{
+        // all are ordered
+        Modes down_M, down_N, down_C; 
+        Modes up_L, up_K, up_C;
+        bool K_after_L;
+    };
+
     class Exp
     {
     private:
@@ -65,8 +71,8 @@ namespace ETL
 
     public:
         //TODO: convert to unordered set
-        Modes down_M, down_N, down_K, down_C; //not ordered
-        Modes up_L, up_C, up_K;
+        std::unordered_set<ModeType> down_M, down_N, down_K, down_C; //not ordered
+        std::unordered_set<ModeType> up_L, up_C, up_K;
     public:
         const Context &ctx;
         void *work_ptr{nullptr}; // pointer to the workspace, shared by all Exp in the program
