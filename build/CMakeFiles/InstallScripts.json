@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/wenruoxu/projects/PLDI26/build/cmake_install.cmake",
+		"/home/wenruoxu/projects/PLDI26/build/src/cmake_install.cmake",
+		"/home/wenruoxu/projects/PLDI26/build/src/core/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

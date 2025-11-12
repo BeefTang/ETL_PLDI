@@ -7,6 +7,7 @@
 #include "ETL.h"
 #include "mem_planner.h"
 #include "dimensions_utils.h"
+#include "solve_perms.h"
 
 namespace ETL {
 
@@ -134,14 +135,38 @@ namespace ETL {
             }
         }
 
-        auto out_modes = processed_exp.second;
+        auto final_out_modes = processed_exp.second;
         for (auto contract : given_path)
         {
             auto &l = treelist[contract.first];
             auto &r = treelist[contract.second];
-            auto new_modes = contract_modes(l->get_outmodes(), r->get_outmodes(), out_modes);
+            auto new_modes = contract_modes(l->get_outmodes(), r->get_outmodes(), final_out_modes);
 
             auto temp = std::make_shared<Contract>(new_modes, ctx, treelist[contract.first], treelist[contract.second]);
+
+            /**********************/
+            auto l_dims = l->get_modes();
+        
+            auto r_dims = r->get_modes();
+            auto this_dims = new_modes;
+
+
+            auto mnkc = get_M_N_K_C(l_dims, r_dims, this_dims);
+
+
+            temp->down_M = mnkc[0];
+            temp->down_N = mnkc[1];
+            temp->down_K = mnkc[2];
+            temp->down_C = mnkc[3];
+
+            l->up_L = mnkc[0];
+            l->up_K = mnkc[2];
+            l->up_C = mnkc[3];
+
+            r->up_L = mnkc[1];
+            r->up_K = mnkc[2];
+            r->up_C = mnkc[3];
+            /*****************/
 
             int big = contract.first > contract.second ? contract.first : contract.second;
             int small = contract.first > contract.second ? contract.second : contract.first;
@@ -150,7 +175,7 @@ namespace ETL {
             treelist.push_back(temp);
         }
 
-        treelist[0]->set_modes(out_modes); // ensure same output modes order
+        treelist[0]->set_modes(final_out_modes); // ensure same output modes order
         return treelist[0];
     }
 
@@ -390,6 +415,118 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
             std::exit(EXIT_FAILURE);
         }
     }
+
+
+    /***********E-saturation*************** */ 
+
+    bool check_order(const std::vector<int>& a, const std::vector<int>& b,
+            const std::vector<int>& c, const std::vector<int>& d,
+            const std::vector<char>& order) {
+        // 1. Build index map of d
+        std::unordered_map<int, int> pos;
+        for (int i = 0; i < (int)d.size(); ++i)
+            pos[d[i]] = i;
+
+        // 2. Compute [min, max] index range for each group
+        auto get_range = [&](const std::vector<int>& v) {
+            int min_idx = d.size(), max_idx = -1;
+            for (int x : v) {
+                int p = pos.at(x);
+                min_idx = std::min(min_idx, p);
+                max_idx = std::max(max_idx, p);
+            }
+            return std::pair<int,int>{min_idx, max_idx};
+        };
+
+        auto range_a = get_range(a);
+        auto range_b = get_range(b);
+        auto range_c = get_range(c);
+
+        // Helper to access by char
+        auto get_range_by_name = [&](char name) -> std::pair<int,int> {
+            if (name == 'a') return range_a;
+            if (name == 'b') return range_b;
+            return range_c;
+        };
+
+        // 3. Check that order[i]’s range finishes before order[i+1] starts
+        for (size_t i = 0; i + 1 < order.size(); ++i) {
+            auto r1 = get_range_by_name(order[i]);
+            auto r2 = get_range_by_name(order[i+1]);
+            if (r1.second >= r2.first) return false;
+        }
+        return true;
+    }
+
+    void find_hotpoints(std::shared_ptr<Exp> exp, std::unordered_set<ModeType>& hotpoints){
+        if (auto i = std::dynamic_pointer_cast<Input>(exp))
+        {
+            return;
+        }
+        else if (auto c = std::dynamic_pointer_cast<Contract>(exp))
+        {
+            // Bottom to top recursive
+            find_hotpoints(c->in_exp1, hotpoints);
+            find_hotpoints(c->in_exp2, hotpoints);
+
+            Modes S = c->get_outmodes();
+            if(c->up_L.empty()){//root contract
+                                //check if set M and N
+                if(check_order(c->down_M, c->down_N, c->down_C, S, {'a', 'b', 'c'}) || check_order(c->down_M, c->down_N, c->down_C, S, {'b', 'a', 'c'})){
+                    std::cout<<"root is gemm already"<<std::endl;
+                }
+                else{
+                    std::cout<<"not possible"<<std::endl;
+                }
+
+            }
+            else{
+                std::vector<std::pair<std::vector<Modes>, Modes>> rules = {
+                        {{c->down_M, c->down_N}, c->down_C},
+                        {{c->up_L, c->up_K}, c->up_C}
+                    };
+                //check
+                //for (auto &x : c->ctx.mode2subscript_v(c->down_M)) std::cout << x << " ";
+                //std::cout << "\n";
+                //for (auto &x : c->ctx.mode2subscript_v(c->down_N)) std::cout << x << " ";
+                //std::cout << "\n";
+                //for (auto &x : c->ctx.mode2subscript_v(c->up_L)) std::cout << x << " ";
+                //std::cout << "\n";
+                //for (auto &x : c->ctx.mode2subscript_v(c->up_K)) std::cout << x << " ";
+                //std::cout << "\n";
+
+                auto perms = permutation_with_rules(S, rules);
+                std::cout << "Number of valid permutations: " << perms.size() << "\n";
+                for (auto &p : perms) {
+                    for (auto &x : exp->ctx.mode2subscript_v(p)) std::cout << x << " ";
+                    std::cout << "\n";
+                }
+            }
+            //for (const auto& m : c->M) {
+            //    hotpoints.insert(m);
+            //}
+            //for (const auto& n : c->N) {
+            //    hotpoints.insert(n);
+            //}
+            //for (const auto& c_dim : c->C) {
+            //    hotpoints.insert(c_dim);
+            //}
+        }
+        else if (auto p = std::dynamic_pointer_cast<Perm>(exp))
+        {
+            //find_hotpoints(p->in_exp, hotpoints);
+        }
+    }
+
+    void Esat(std::shared_ptr<Output> program){
+        //auto esat = ESaturation(program, repeat);
+        //esat.saturate();
+        std::unordered_set<ModeType> temp;
+
+        find_hotpoints(program->exp, temp);
+
+    }
+
     /***********Print functions for debugging*************** */ 
     void time_print(float estimated_time, float real_time){
             std::cout << ", estimated time: " <<estimated_time<<  ", real time: " << real_time << " ms";

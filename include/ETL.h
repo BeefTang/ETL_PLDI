@@ -3,6 +3,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include "tensor.h"
 #include "context.h"
 
@@ -62,6 +63,10 @@ namespace ETL
     private:
         Modes out_modes;
 
+    public:
+        //TODO: convert to unordered set
+        Modes down_M, down_N, down_K, down_C; //not ordered
+        Modes up_L, up_C, up_K;
     public:
         const Context &ctx;
         void *work_ptr{nullptr}; // pointer to the workspace, shared by all Exp in the program
@@ -141,8 +146,9 @@ namespace ETL
 
     class Contract : public Exp
     {
-        public:
-            Modes l_in_modes, r_in_modes;
+        //public:
+        //    Modes l_in_modes, r_in_modes;
+
         public:
             std::shared_ptr<Exp> in_exp1, in_exp2;
             Contract(Modes out, const Context &ctx, std::shared_ptr<Exp> l, std::shared_ptr<Exp> r, std::string name = "Contract") : Exp(out, ctx, name), in_exp1(l), in_exp2(r) {};
@@ -155,7 +161,7 @@ namespace ETL
     {
         public:
             //Modes are also E-class (child of the node), used to identify E-node
-            Modes M, N, K, C; // out_modes==MNC 
+            //Modes M, N, K, C; // out_modes==MNC 
             bool l_trans, r_trans; //l_in_modes == MK if l_trans=false, else l_in_modes==KM 
 
         public:
@@ -220,6 +226,7 @@ namespace ETL
     std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &sizes, std::vector<std::pair<int, int>> &contraciton_path, std::vector<void *> *tensors=nullptr, DataPrecision precision = FP32);
 
     std::shared_ptr<Exp> Expand(std::shared_ptr<Exp> exp);
+    void Esat(std::shared_ptr<Output> program);
 }
 
 #endif

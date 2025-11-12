@@ -9,6 +9,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/core.dir/mem_planner.cpp.o.d"
   "CMakeFiles/core.dir/reader.cpp.o"
   "CMakeFiles/core.dir/reader.cpp.o.d"
+  "CMakeFiles/core.dir/solve_perms.cpp.o"
+  "CMakeFiles/core.dir/solve_perms.cpp.o.d"
   "libcore.pdb"
   "libcore.so"
 )
