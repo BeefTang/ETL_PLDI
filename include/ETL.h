@@ -4,6 +4,7 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include "tensor.h"
 #include "context.h"
 
@@ -57,12 +58,41 @@ namespace ETL
         }
     };
 
+    /*****************
+     Ued by DP
+     ****************************/
+     //E_node have to check its constrain's up_L, K,C is compitable with possible(down_M N C) of the exp of this node  
     struct E_node{
+        enum {input, nochild, onechild, twochilren} kind; //threr only one nochild which pick the optimal children from each children list
+        //Modes up_L, up_K, up_C;//constrains for father constrain, if 
+        union{
+            std::shared_ptr<Constrain> input; //only up_ filled
+            struct {
+                std::shared_ptr<Constrain> constrain;
+            } one;
+            struct {
+                std::shared_ptr<Constrain> constrain1, constrain2; 
+            } two;
+
+        } u;
+
         // all are ordered
-        Modes down_M, down_N, down_C; 
-        Modes up_L, up_K, up_C;
-        bool K_after_L;
+        int num_perms=0;
     };
+
+    struct nodeCmp{
+        bool operator()(std::shared_ptr<E_node> a, std::shared_ptr<E_node> b) const {
+            return a->num_perms < b->num_perms;
+        }
+    };
+
+    struct Constrain{
+        Modes whole;
+        Modes up_L_ordered, up_K_ordered, up_C_ordered;//K is not used for up and down, but for brother
+        Modes down_M_ordered, down_N_ordered, down_C_ordered;
+    };
+
+    /*********************************************/
 
     class Exp
     {
@@ -70,9 +100,13 @@ namespace ETL
         Modes out_modes;
 
     public:
-        //TODO: convert to unordered set
         std::unordered_set<ModeType> down_M, down_N, down_K, down_C; //not ordered
         std::unordered_set<ModeType> up_L, up_C, up_K;
+
+
+        std::set<std::shared_ptr<E_node>, nodeCmp> opt_list;
+        std::vector<std::shared_ptr<Constrain>> possible_list;
+
     public:
         const Context &ctx;
         void *work_ptr{nullptr}; // pointer to the workspace, shared by all Exp in the program

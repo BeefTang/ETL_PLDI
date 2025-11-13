@@ -465,16 +465,95 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
         return true;
     }
 
-    void find_hotpoints(std::shared_ptr<Exp> exp, std::unordered_set<ModeType>& hotpoints){
+    //given whole order, and a subset, give orderd of that subset
+    Modes ordering_subset(const Modes & order, const std::unordered_set<ModeType> &s){
+        Modes result;
+        result.reserve(s.size());  // optional
+
+        for (ModeType x : order) {
+            if (s.count(x)) {  // check if element is in the set
+                result.push_back(x);
+            }
+        }
+        return result;
+    }
+
+    bool is_compitable_b(const std::shared_ptr<Constrain> down, const std::shared_ptr<Constrain> up){
+            //TODO: check if input == from_possible.down_M_ordered/N + from_possible.down_C_ordered
+            if((up->up_L_ordered == down->down_N_ordered || 
+                        up->up_L_ordered == down->down_M_ordered) && 
+                    up->up_C_ordered == down->down_C_ordered){
+                return true;
+            }
+            else{
+                return false;
+            }
+    }
+    bool is_compitable(const std::shared_ptr<Constrain> from_possible, const std::shared_ptr<E_node> node){
+        if(node->kind == input) {
+            //TODO: check if input == from_possible.down_M_ordered/N + from_possible.down_C_ordered
+            //if((node->u.input.up_L_ordered == from_possible->down_N_ordered || 
+            //            node->u.input.up_L_ordered == from_possible->down_M_ordered) && 
+            //        node->u.input.up_C_ordered == from_possible->down_C_ordered){
+            if(is_compitable_b(from_possible, node->u.input)){
+                return true;
+            }
+            else{
+                return false;
+            }
+        }
+        else if(node->kind == nochild)
+            return true;
+        else if(node->kind == onechild){
+            if(is_compitable_b(from_possible, node->u.one.constrain)){
+                return true;
+            }
+            else{
+                return false;
+            }
+        }
+        else if(node->kind == twochilren){
+            if(is_compitable_b(from_possible, node->u.two.constrain1) &&
+               is_compitable_b(from_possible, node->u.two.constrain2)){
+                return true;
+            }
+            else{
+                return false;
+            }
+        }
+
+        
+    }
+
+    void DP_saturation(std::shared_ptr<Exp> exp, std::unordered_set<ModeType>& hotpoints){
+
         if (auto i = std::dynamic_pointer_cast<Input>(exp))
         {
+                Modes leaf = i->get_outmodes();
+                bool L_before_K =  check_order(i->up_L, i->up_K, i->up_C, leaf, {'a', 'b', 'c'});
+                bool K_before_L =  check_order(i->up_L, i->up_K, i->up_C, leaf, {'b', 'a', 'c'});
+                //update possible_list
+                auto temp = std::make_shared<Constrain>();
+                if(L_before_K || K_before_L){
+                    temp->whole = leaf; 
+                    temp->up_L_ordered = ordering_subset(leaf,  i->up_L); temp->up_K_ordered = ordering_subset(leaf,  i->up_K); temp->up_C_ordered =ordering_subset(leaf,  i->up_C);   
+                    //  leaf doean't have down temp->down_M_ordered = ordering_subset(leaf,  i->down_M); temp->down_N_ordered = ordering_subset(leaf,  i->down_N); temp->down_C_ordered =ordering_subset(leaf,  i->down_C); 
+                    i->possible_list.push_back(temp);
+                }
+
+                //update opt_list
+                auto temp_node = std::make_shared<E_node>();
+                temp_node->kind = input;
+                temp_node->u.input = temp;
+                temp_node->num_perms = 0;
+                i->opt_list.insert(temp_node);
             return;
         }
         else if (auto c = std::dynamic_pointer_cast<Contract>(exp))
         {
             // Bottom to top recursive
-            find_hotpoints(c->in_exp1, hotpoints);
-            find_hotpoints(c->in_exp2, hotpoints);
+            DP_saturation(c->in_exp1, hotpoints);
+            DP_saturation(c->in_exp2, hotpoints);
 
             Modes S = c->get_outmodes();
             if(c->up_L.empty()){//root contract
@@ -492,36 +571,75 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
                         {{c->down_M, c->down_N}, c->down_C},
                         {{c->up_L, c->up_K}, c->up_C}
                     };
-                //check
-                //for (auto &x : c->ctx.mode2subscript_v(c->down_M)) std::cout << x << " ";
-                //std::cout << "\n";
-                //for (auto &x : c->ctx.mode2subscript_v(c->down_N)) std::cout << x << " ";
-                //std::cout << "\n";
-                //for (auto &x : c->ctx.mode2subscript_v(c->up_L)) std::cout << x << " ";
-                //std::cout << "\n";
-                //for (auto &x : c->ctx.mode2subscript_v(c->up_K)) std::cout << x << " ";
-                //std::cout << "\n";
 
                 auto perms = permutation_with_rules(S, rules);
                 std::cout << "Number of valid permutations: " << perms.size() << "\n";
                 for (auto &p : perms) {
-                    for (auto &x : exp->ctx.mode2subscript_v(p)) std::cout << x << " ";
-                    std::cout << "\n";
+                    auto temp = std::make_shared<Constrain>();
+                    temp->whole = p; 
+                    temp->down_M_ordered = ordering_subset(p,  c->down_M); temp->down_N_ordered = ordering_subset(p,  c->down_N); temp->down_C_ordered =ordering_subset(p,  c->down_C);   
+                    temp->up_L_ordered = ordering_subset(p,  c->up_L); temp->up_K_ordered = ordering_subset(p,  c->up_K); temp->up_C_ordered =ordering_subset(p,  c->up_C);     
+
+                    c->possible_list.push_back(temp);
                 }
             }
-            //for (const auto& m : c->M) {
-            //    hotpoints.insert(m);
-            //}
-            //for (const auto& n : c->N) {
-            //    hotpoints.insert(n);
-            //}
-            //for (const auto& c_dim : c->C) {
-            //    hotpoints.insert(c_dim);
-            //}
+
+            // update opt_list
+            if(c->in_exp1->possible_list.empty() && c->in_exp2->possible_list.empty()){
+                //find opt_list's best to form a no children
+                auto temp = std::make_shared<E_node>();
+                temp->kind = nochild;
+                temp->num_perms = c->in_exp1->opt_list.begin()->num_perms + c->in_exp2->opt_list.begin()->num_perms + 2;
+                c->opt_list.push_back(temp);
+            }
+            else if(!(c->in_exp1->possible_list.empty()) && !(c->in_exp2->possible_list.empty())){
+                for(auto &x:c->in_exp1->possible_list){
+                }
+                for(auto & x:c->in_exp1->possible_list){
+                    for(auto &y:c->in_exp2->possible_list){
+                        //check if they have same up_K
+                        if(x->up_K_ordered == y->up_K_ordered && x->up_C_ordered == y->up_C_ordered){
+                            auto temp = std::make_shared<E_node>();
+                            temp->kind = twochilren;
+                            temp->u.two.constrain1 = x;
+                            temp->u.two.constrain2 = y;
+                            temp->num_perms = c->in_exp1->opt_list.begin() + c->in_exp2->opt_list.begin();
+                            c->opt_list.push_back(temp);
+                        }
+                        else{
+                            //one of the child must perm
+                            auto temp1 = std::make_shared<E_node>();
+                            temp1->kind = onechild;
+                            temp1->u.one.constrain = x;
+                            temp->num_perms = c->in_exp1->opt_list.begin() + c->in_exp2->opt_list.begin() +1;
+                            c->opt_list.push_back(temp1);
+                        }
+                            E_node temp;
+                            temp.kind = twochilren;
+                            for(auto & t:c->exp1->opt_list){
+                                //then find in opt_list for its cost
+                                if(is_compitable(x, t.
+                                
+                            }
+                            temp.num_perms = c->exp1->opt_list.begin() + c->exp2->opt_list.begin();
+                            c->opt_list.push_back(temp);
+                        }
+                    }
+                }
+            }
+            else if(!(c->in_exp1->possible_list.empty()) || !(c->in_exp2->possible_list.empty())){
+                //if one is not empty, 
+                for(auto x:c->in_exp1->possible_list){
+                    E_node temp;
+                    temp.kind = onechild;
+
+                }
+            }
         }
         else if (auto p = std::dynamic_pointer_cast<Perm>(exp))
         {
-            //find_hotpoints(p->in_exp, hotpoints);
+            //Impossible
+            std::cerr << "Error: shouldn't be jump to perm\n";
         }
     }
 
@@ -530,11 +648,25 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
         //esat.saturate();
         std::unordered_set<ModeType> temp;
 
-        find_hotpoints(program->exp, temp);
+        DP_saturation(program->exp, temp);
 
     }
 
+    
 
+    void DP(std::shared_ptr<Exp> exp){
+        if (auto i = std::dynamic_pointer_cast<Input>(exp))
+        {
+            //if the layout has LKC or KLC, the list has one layout, namely itself
+
+            each layout has num_perms == 0 if there is a layout 
+            
+            and other has 1 perm
+
+            return;
+        }
+
+    }
     //void DP(std::shared_ptr<Exp> exp){
     //    //2 lists: up_possible(by z3) and current_all nodes[build in DP], and others[placeholder]
     //    //current has node that must have perm upwards

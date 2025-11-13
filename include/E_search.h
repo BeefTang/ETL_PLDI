@@ -1,5 +1,5 @@
 
-struct {
+struct E_node{
    Modes up_L, up_C; 
    Modes down_M, down_N, down_C; 
    Modes bro_K;
