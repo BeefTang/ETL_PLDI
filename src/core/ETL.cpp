@@ -544,7 +544,7 @@ std::shared_ptr<Output> build_ETL_tree(std::string &expr, std::vector<int64_t> &
                 //update opt_list
                 auto temp_node = std::make_shared<E_node>();
                 temp_node->kind = input;
-                temp_node->u.input = temp;
+                temp_node->u.input = temp;//constrain is itself
                 temp_node->num_perms = 0;
                 i->opt_list.insert(temp_node);
             return;

@@ -62,16 +62,18 @@ namespace ETL
      Ued by DP
      ****************************/
      //E_node have to check its constrain's up_L, K,C is compitable with possible(down_M N C) of the exp of this node  
-    struct E_node{
+    struct E_node{//representing a GEMM layout, not considering to be in possible, so has no up_*
         enum {input, nochild, onechild, twochilren} kind; //threr only one nochild which pick the optimal children from each children list
         //Modes up_L, up_K, up_C;//constrains for father constrain, if 
         union{
             std::shared_ptr<Constrain> input; //only up_ filled
             struct {
                 std::shared_ptr<Constrain> constrain;
+                Modes down_L, down_C;
             } one;
             struct {
                 std::shared_ptr<Constrain> constrain1, constrain2; 
+                Modes down_L1, down_L2, down_C;
             } two;
 
         } u;
@@ -104,7 +106,7 @@ namespace ETL
         std::unordered_set<ModeType> up_L, up_C, up_K;
 
 
-        std::set<std::shared_ptr<E_node>, nodeCmp> opt_list;
+        std::set<std::shared_ptr<E_node>, nodeCmp> opt_list;//storing all possible GEMM layouts and corresponding num_perms, represneted by constrain
         std::vector<std::shared_ptr<Constrain>> possible_list;
 
     public:
