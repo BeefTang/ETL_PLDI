@@ -63,6 +63,7 @@ namespace ETL
      ****************************/
      //E_node have to check its constrain's up_L, K,C is compitable with possible(down_M N C) of the exp of this node  
     struct E_node{//representing a GEMM layout, not considering to be in possible, so has no up_*
+        //TODO change nochild to Perm which indicates this is a permutation node and not constrained by child
         enum {input, nochild, onechild, twochilren} kind; //threr only one nochild which pick the optimal children from each children list
         //Modes up_L, up_K, up_C;//constrains for father constrain, if 
         union{
